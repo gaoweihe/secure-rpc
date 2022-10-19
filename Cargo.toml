@@ -23,3 +23,7 @@ path = "test/ibverbs.rs"
 [[bin]]
 name = "srpc"
 path = "src/srpc.rs"
+
+[[bin]]
+name = "srpc-example"
+path = "example/loopback.rs"
