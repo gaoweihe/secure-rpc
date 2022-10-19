@@ -6,6 +6,8 @@ RPC demo: `cargo run --bin srpc`
 
 IBverbs test: `cargo run --bin ibverbs` 
 
+Run the loopback example: `cargo run --bin srpc-example` 
+
 ## Source files
 
 1. ` src/core/ ` 
