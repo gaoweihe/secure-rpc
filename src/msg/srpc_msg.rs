@@ -1,6 +1,6 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct RpcMsgPayload
 {
     pub msg_data: Vec<u8>, 
@@ -24,7 +24,7 @@ impl RpcMsgPayload
 
 unsafe impl Send for RpcMsgPayload {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RpcMsgHandle
 {
     pub msg_type: RpcMsgType, 
@@ -55,7 +55,7 @@ impl RpcMsgHandle
 unsafe impl Send for RpcMsgHandle {}
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum RpcMsgType
 {
     // Request message type.
@@ -71,7 +71,7 @@ pub enum RpcMsg {
     Stream(RpcStreamMsg),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct RpcOnceMsg
 {
     pub req_type: u8,

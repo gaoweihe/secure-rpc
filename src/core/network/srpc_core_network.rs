@@ -14,29 +14,30 @@ unsafe impl Sync for RpcNetworkCore {}
 use ibverbs::MemoryRegion;
 use once_cell::sync::OnceCell;
 
+use tracing::error;
 #[allow(unused_imports)]
 use tracing::{info, trace};
 
-use crate::core::srpc_core::{RPC_DISPATCHER, get_mut_from_immut};
-static IBVERBS_QP_MAP: OnceCell<std::sync::Arc<std::sync::Mutex<
+use crate::core::{srpc_core::{RPC_DISPATCHER, get_mut_from_immut}, network::srpc_grpc::SrpcGrpcPreComm};
+pub static IBVERBS_QP_MAP: OnceCell<std::sync::Arc<std::sync::Mutex<
     std::collections::BTreeMap<u32, ibverbs::QueuePair>
-    >>> = OnceCell::new();
-static IBVERBS_PD: OnceCell<std::sync::Arc<
+    >>> = OnceCell::new(); // session_id -> queue pair 
+pub static IBVERBS_PD: OnceCell<std::sync::Arc<
     ibverbs::ProtectionDomain>> = OnceCell::new();
-static IBVERBS_CTX: OnceCell<std::sync::Arc<
+pub static IBVERBS_CTX: OnceCell<std::sync::Arc<
     ibverbs::Context>> = OnceCell::new(); 
-static IBVERBS_CQ: OnceCell<std::sync::Arc<
+pub static IBVERBS_CQ: OnceCell<std::sync::Arc<
     ibverbs::CompletionQueue>> = OnceCell::new();
-static IBVERBS_WRID_MAP: OnceCell<std::sync::Arc<std::sync::Mutex<
+pub static IBVERBS_WRID_MAP: OnceCell<std::sync::Arc<std::sync::Mutex<
     std::collections::BTreeMap<u64, u32>
     >>> = OnceCell::new(); // wr_id -> session_id
-static IBVERBS_MR_VEC: OnceCell<std::vec::Vec<
+pub static IBVERBS_MR_VEC: OnceCell<std::vec::Vec<
     ibverbs::MemoryRegion<u8>
     >> = OnceCell::new(); // mr 
-static IBVERBS_MR_MAP: OnceCell<std::sync::Arc<std::sync::Mutex<
+pub static IBVERBS_MR_MAP: OnceCell<std::sync::Arc<std::sync::Mutex<
     std::collections::BTreeMap<u64, u32>
     >>> = OnceCell::new(); // wr_id -> mr_index 
-static IBVERBS_MR_MAP_INV: OnceCell<std::sync::Arc<std::sync::Mutex<
+pub static IBVERBS_MR_MAP_INV: OnceCell<std::sync::Arc<std::sync::Mutex<
     std::collections::BTreeMap<u32, u64>
     >>> = OnceCell::new(); // mr_index -> wr_id 
 
@@ -70,6 +71,8 @@ impl RpcNetworkCore
 
     fn init(&self)
     {
+        info!("RpcNetworkCore: init");
+
         let _result = IBVERBS_QP_MAP.set(
             std::sync::Arc::new(
             std::sync::Mutex::new(
@@ -91,6 +94,27 @@ impl RpcNetworkCore
                 std::collections::BTreeMap::new()
             )));
         self.init_infiniband();
+        self.init_grpc();
+
+    }
+
+    fn init_grpc(&self)
+    {
+        info!("init_grpc");
+
+        let listen_addr = "0.0.0.0:9000";
+        let _handle = tokio::spawn(async move {
+            let result = 
+                SrpcGrpcPreComm::serve(listen_addr).await;
+            match result {
+                Ok(_) => {
+                    info!("grpc server stopped");
+                },
+                Err(e) => {
+                    info!("grpc server stopped with error: {:?}", e);
+                },
+            }
+        });
     }
 
     fn init_infiniband(&self)
@@ -124,12 +148,6 @@ impl RpcNetworkCore
 
         tokio::spawn(async move {
             let cq = IBVERBS_CQ.get().unwrap();
-            let pd = IBVERBS_PD.get().unwrap();
-            let qp_builder = pd.create_qp(
-                &cq, 
-                &cq, 
-                ibverbs::ibv_qp_type::IBV_QPT_RC
-            ).build().unwrap();
 
             let mut completions = [ibverbs::ibv_wc::default(); 16];
             loop {
@@ -152,7 +170,7 @@ impl RpcNetworkCore
                             Self::release_occupied_mr(wr_id);
                         }
                         _ => {
-                            trace!("wc.opcode() = {:?}", wc.opcode());
+                            error!("wc.opcode() = {:?}", wc.opcode());
                             panic!("unexpected completion");
                         }
                     }
@@ -231,7 +249,6 @@ impl RpcNetworkCore
         let data_len = bin.len();
         trace!("send_to: session_id = {}, data_len = {}", session_id, data_len);
         trace!("send_to: raw_msg_len = {:?}", u16::from_be_bytes([bin[2046], bin[2047]]));
-        trace!("send_to: raw_msg = {:?}", &bin[..]);
 
         // invoke network to send request
         let qp_map = IBVERBS_QP_MAP.get().unwrap();
@@ -239,6 +256,7 @@ impl RpcNetworkCore
         let qp = qp_map.get_mut(&session_id).unwrap();
 
         let wr_id = self.get_wr_id();
+        trace!("post_receive trying to get_vacant_mr: wr_id = {}", wr_id);
         let mut mr_recv = self.get_vacant_mr(wr_id).unwrap(); 
 
         IBVERBS_WRID_MAP.get().unwrap()
@@ -250,9 +268,9 @@ impl RpcNetworkCore
         trace!("post_receive: wr_id = {}", wr_id);
 
         let wr_id = self.get_wr_id();
+        trace!("post_send trying to get_vacant_mr: wr_id = {}", wr_id);
         let mut mr_send = self.get_vacant_mr(wr_id).unwrap(); 
         mr_send.clone_from_slice(bin);
-        trace!("{:?} {:?}", mr_send[0], mr_send[1]);
         IBVERBS_WRID_MAP.get().unwrap()
             .lock().unwrap()
             .insert(wr_id, session_id);
@@ -305,7 +323,8 @@ impl RpcNetworkCore
 
     }
 
-    pub fn connect_to(&self, session_id: u32, peer_uri: &str) -> bool
+    // FIXME: change return value to Result<> type 
+    pub async fn connect_to(&self, session_id: u32, peer_uri: &str) -> bool
     {
         self.conn_map.write().unwrap()
             .insert(session_id, (Vec::new(), Vec::new()));
@@ -314,13 +333,23 @@ impl RpcNetworkCore
         let pd = IBVERBS_PD.get().unwrap();
         let cq = IBVERBS_CQ.get().unwrap();
         let qp_builder = pd.create_qp(
-            &cq, // loopback cq 
-            &cq, // loopback cq 
+            &cq, 
+            &cq, 
             ibverbs::ibv_qp_type::IBV_QPT_RC
         ).build().unwrap();
-        let endpoint = qp_builder.endpoint(); // loopback endpoint 
-        info!("local endpoint = {:?}", endpoint);
-        let qp = qp_builder.handshake(endpoint).unwrap(); 
+        let loc_endpoint = 
+            qp_builder.endpoint(); // local endpoint 
+        info!("local endpoint = {:?}", loc_endpoint);
+
+        let rmt_endpoint = 
+            SrpcGrpcPreComm::get_endpoint(
+                &loc_endpoint, 
+                peer_uri
+            ).await.unwrap(); 
+        info!("remote endpoint = {:?}", rmt_endpoint);
+
+        let qp = qp_builder.handshake(rmt_endpoint).unwrap(); 
+        info!("qp_map insert session_id: {}", session_id);
         IBVERBS_QP_MAP.get().unwrap().lock().unwrap()
             .insert(session_id, qp);
         

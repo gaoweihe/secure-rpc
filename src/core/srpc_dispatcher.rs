@@ -86,11 +86,13 @@ impl RpcDispatcher
         )
     }
 
-    pub fn connect_to(&self, peer_id: u32, peer_uri: &str)
+    pub async fn connect_to(&self, peer_id: u32, peer_uri: &str) -> Result<u32, Box<dyn std::error::Error>>
     {
+        info!("connect_to: peer_id: {}, peer_uri: {}", peer_id, peer_uri);
+
         let session_id = self.get_session_id();
 
-        let _ = self.network.connect_to(session_id, peer_uri);
+        let _ = self.network.connect_to(session_id, peer_uri).await;
         let session = RpcSession::new(
             peer_id, 
             peer_uri.to_string(), 
@@ -103,6 +105,9 @@ impl RpcDispatcher
 
         trace!("connected to peer {}:{} with session {}", 
             peer_id, peer_uri, session_id);
+
+        // FIXME: return error on failure 
+        Ok(session_id)
     }
 
     pub fn on_recv_msg(&self, session_id: u32, bin: &[u8])
@@ -111,9 +116,10 @@ impl RpcDispatcher
         trace!("on_recv_msg: raw_len {}", raw_len);
         let raw_msg = &bin[..raw_len];
         trace!("on_recv_msg: raw_msg.len() {}", raw_msg.len());
-        trace!("{:?}", raw_msg);
-        let r = flexbuffers::Reader::get_root(raw_msg).unwrap();
-        let msg = RpcOnceMsg::deserialize(r).unwrap();
+        let reader = 
+            flexbuffers::Reader::get_root(raw_msg).unwrap();
+        let msg = 
+            RpcOnceMsg::deserialize(reader).unwrap();
 
         let mut msg_handle = RpcMsgHandle::default();
         msg_handle.set_msg(msg);
@@ -191,20 +197,19 @@ impl RpcDispatcher
 
             // ensure message buffer is of equal length to 
             // pre-allocated RDMA memory region 
-            let mut s = flexbuffers::FlexbufferSerializer::new();
-            rpc_msg.serialize(&mut s).unwrap();
-            let msg_bin = s.view();
+            let mut serializer = 
+                flexbuffers::FlexbufferSerializer::new();
+            rpc_msg.serialize(&mut serializer).unwrap();
+            let msg_bin = serializer.view();
             let raw_msg_bin_len = msg_bin.len() as u16;
             trace!("check_send_req: flexbuff msg_bin len= {:?}", raw_msg_bin_len);
             let mut msg_bin = msg_bin.to_vec();
-            trace!("{:?}", msg_bin);
 
             msg_bin.resize(2048, 0);
             let msg_bin = msg_bin.as_mut_slice();
             trace!("check_send_req: resize msg_bin len= {:?}", msg_bin.len());
             msg_bin[2046] = raw_msg_bin_len.to_be_bytes()[0];
             msg_bin[2047] = raw_msg_bin_len.to_be_bytes()[1];
-            trace!("{:?}", msg_bin);
 
             let session_id = self.get_session_id_by_peer_id(
                 msg_handle.peer_id).unwrap();
