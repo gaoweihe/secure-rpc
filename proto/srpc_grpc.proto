@@ -5,7 +5,7 @@ package SrpcGrpc;
 service SrpcGrpcService {
   rpc GetEndpoint (GetEndpointRequest) 
     returns (GetEndpointResponse);
-}
+} 
  
 message GetEndpointRequest {
   required bytes src_lid = 1; // uint16
@@ -15,3 +15,4 @@ message GetEndpointRequest {
 message GetEndpointResponse {
   required bytes lid = 1;
   required bytes gid = 2;
+} 
