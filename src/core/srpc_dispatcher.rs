@@ -9,7 +9,8 @@ use crate::core::srpc_core::RPC_CORE;
 use crate::core::network::srpc_core_network::RpcNetworkCore; 
 use crate::core::srpc_session::RpcSession;
 
-use super::srpc_core::RPC_DISPATCHER; 
+use super::srpc_core::RPC_DISPATCHER;
+use super::srpc_session::SESSION_COUNTER; 
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -70,6 +71,12 @@ impl RpcDispatcher
 
         let dispatcher = std::sync::Arc::new(dispatcher);
 
+        SESSION_COUNTER.set(
+            std::sync::Arc::new(
+                std::sync::atomic::AtomicU32::new(0)
+            )
+        ).unwrap();
+
         dispatcher
     }
 
@@ -78,19 +85,11 @@ impl RpcDispatcher
         self.network = network;
     }
 
-    pub fn get_session_id(&self) -> u32
-    {
-        self.session_counter.fetch_add(
-            1, 
-            std::sync::atomic::Ordering::SeqCst
-        )
-    }
-
     pub async fn connect_to(&self, peer_id: u32, peer_uri: &str) -> Result<u32, Box<dyn std::error::Error>>
     {
         info!("connect_to: peer_id: {}, peer_uri: {}", peer_id, peer_uri);
 
-        let session_id = self.get_session_id();
+        let session_id = RpcSession::get_session_id();
 
         let _ = self.network.connect_to(session_id, peer_uri).await;
         let session = RpcSession::new(

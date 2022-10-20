@@ -11,6 +11,9 @@ use tracing::info;
 use tracing::trace;
 use tracing::{error};
 
+use crate::core::network::srpc_core_network::IBVERBS_QP_MAP;
+use crate::core::srpc_session::RpcSession;
+
 use super::srpc_core_network::IBVERBS_CQ;
 use super::srpc_core_network::IBVERBS_PD;
 
@@ -26,6 +29,12 @@ impl PreCommService for SrpcGrpcPreComm {
         request: tonic::Request<GetEndpointRequest>,
     ) -> Result<tonic::Response<GetEndpointResponse>, tonic::Status> {
         let request = request.into_inner();
+        let src_endpoint_bin = request.src_endpoint;
+        let src_endpoint_slice = src_endpoint_bin.as_slice();
+        let reader = 
+            flexbuffers::Reader::get_root(src_endpoint_slice).unwrap(); 
+        let src_endpoint = 
+            ibverbs::QueuePairEndpoint::deserialize(reader).unwrap();
 
         // serialize designated endpoint 
         let pd = IBVERBS_PD.get().unwrap();
@@ -36,7 +45,13 @@ impl PreCommService for SrpcGrpcPreComm {
             ibverbs::ibv_qp_type::IBV_QPT_RC
         ).build().unwrap();
         let endpoint = qp_builder.endpoint();
+        let qp = qp_builder.handshake(src_endpoint).unwrap();
         
+        let session_id = RpcSession::get_session_id(); 
+        info!("qp_map insert session_id: {}", session_id);
+        IBVERBS_QP_MAP.get().unwrap().lock().unwrap()
+            .insert(session_id, qp);
+
         let mut serializer = 
             flexbuffers::FlexbufferSerializer::new();
         endpoint.serialize(&mut serializer).unwrap();

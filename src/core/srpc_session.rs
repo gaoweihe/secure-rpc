@@ -4,6 +4,10 @@ use tracing::{error};
 use crate::msg::srpc_msg::{RpcMsgPayload};
 use crate::{core::srpc_dispatcher::RpcDispatcher, msg::srpc_msg::{RpcMsgHandle, RpcOnceMsg}}; 
 
+use once_cell::sync::OnceCell; 
+pub static SESSION_COUNTER: OnceCell<std::sync::Arc<
+    std::sync::atomic::AtomicU32>> = OnceCell::new(); 
+
 #[derive(PartialEq, Debug)]
 pub enum RpcSessionStatus {
     // The session is not connected to any server.
@@ -40,6 +44,14 @@ impl RpcSession {
             peer_uri: peer_uri, 
             dispatcher: dispatcher,
         }
+    }
+
+    pub fn get_session_id() -> u32
+    {
+        SESSION_COUNTER.get().unwrap().fetch_add(
+            1, 
+            std::sync::atomic::Ordering::SeqCst
+        )
     }
 
     pub fn push_request(&mut self, msg: RpcOnceMsg) -> bool {

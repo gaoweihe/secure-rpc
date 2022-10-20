@@ -54,8 +54,11 @@ async fn main() {
     msg.payload.msg_data = raw_str.as_bytes().to_vec();
     req.set_msg(msg);
     req.peer_id = peer_id;
+
+    // sleep for 2 seconds
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     rpc_core.dispatcher.push_req(req.clone()); 
-    rpc_core.dispatcher.push_req(req.clone()); 
+    // rpc_core.dispatcher.push_req(req.clone()); 
 
     loop {
         // run evnet loop 
