@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package SrpcGrpc;
+
+service SrpcGrpcService {
+  rpc GetEndpoint (GetEndpointRequest) 
+    returns (GetEndpointResponse);
+}
+ 
+message GetEndpointRequest {
+  required bytes src_lid = 1; // uint16
+  required bytes src_gid = 2; // uint128
+}
+ 
+message GetEndpointResponse {
+  required bytes lid = 1;
+  required bytes gid = 2;

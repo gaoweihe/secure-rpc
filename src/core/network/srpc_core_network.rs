@@ -318,7 +318,8 @@ impl RpcNetworkCore
             &cq, // loopback cq 
             ibverbs::ibv_qp_type::IBV_QPT_RC
         ).build().unwrap();
-        let endpoint = qp_builder.endpoint();
+        let endpoint = qp_builder.endpoint(); // loopback endpoint 
+        info!("local endpoint = {:?}", endpoint);
         let qp = qp_builder.handshake(endpoint).unwrap(); 
         IBVERBS_QP_MAP.get().unwrap().lock().unwrap()
             .insert(session_id, qp);
