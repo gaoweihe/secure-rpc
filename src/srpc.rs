@@ -1,7 +1,7 @@
 #[allow(unused_imports)]
 use secrpc::core::srpc_core::RpcCore;
 
-use secrpc::{msg::srpc_msg::{RpcMsgHandle, RpcOnceMsg}, core::srpc_core::RPC_DISPATCHER};
+use secrpc::{msg::srpc_msg::{RpcMsgHandle, RpcOnceMsg}, core::srpc_core::RPC_DISPATCHER, conf::conf::RpcConf};
 use tracing::{info, Level, trace};
 use tracing_subscriber::{FmtSubscriber};
 
@@ -18,12 +18,16 @@ fn simple_callback(msg_handle: RpcMsgHandle)
 async fn main() {
     println!("Hello, world!");
 
+    RpcConf::init_conf();
+
     // set tracer 
     let subscriber = FmtSubscriber::builder()
         .with_max_level(Level::INFO)
         .finish();
     tracing::subscriber::set_global_default(subscriber)
-        .expect("setting default subscriber failed");
+        .expect("setting default subscriber failed"); 
+
+    RpcConf::print_conf();
 
     let rpc_core = RpcCore::new();
     assert!(RPC_DISPATCHER.get().is_some());
@@ -33,7 +37,18 @@ async fn main() {
             Box::new(simple_callback)
         );
     let _result = rpc_core.start();
-    rpc_core.dispatcher.connect_to(0, "");
+
+    let conf = RpcConf::get_conf();
+    let rmt_grpc_uri = conf.rmt_grpc_uri
+        .get(0).unwrap(); 
+    let peer_id = 1;
+
+    let _session_id = 
+        rpc_core.dispatcher.connect_to(peer_id, rmt_grpc_uri).await;
+
+    // sleep for 1 second(s)
+    // for better trace log (optional) 
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     loop {
         // push request 
@@ -44,9 +59,10 @@ async fn main() {
         info!("main: push_req: {:?}", raw_str);
         msg.payload.msg_data = raw_str.as_bytes().to_vec();
         req.set_msg(msg);
-        rpc_core.dispatcher.push_req(req); 
+        req.peer_id = peer_id;
+        rpc_core.dispatcher.push_req(req);  
 
-        // run evnet loop 
+        // run event loop
         rpc_core.dispatcher.run_loop_once();
     }
 

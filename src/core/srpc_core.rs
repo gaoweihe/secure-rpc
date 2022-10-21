@@ -54,7 +54,6 @@ pub struct RpcCore {
     runtime_lock: std::sync::Mutex<()>, 
 
     // runtime functionalities 
-    network: RpcNetworkCore, 
     pub dispatcher: std::sync::Arc<RpcDispatcher>,
 }
 
@@ -80,7 +79,6 @@ impl<'cb> RpcCore {
             req_counter: 0.into(),
             runtime_lock: std::sync::Mutex::new(()),
             dispatcher: dispatcher.clone(),
-            network: RpcNetworkCore::new_singleton(),
         };
 
         RPC_DISPATCHER.set(dispatcher).unwrap();

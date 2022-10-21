@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package PreComm;
+
+service PreCommService {
+  rpc GetEndpoint (GetEndpointRequest) 
+    returns (GetEndpointResponse);
+} 
+ 
+message GetEndpointRequest {
+  bytes src_endpoint = 1;
+}
+ 
+message GetEndpointResponse {
+  bytes endpoint = 1; 
+} 
