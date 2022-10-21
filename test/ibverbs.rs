@@ -16,6 +16,7 @@ fn main() {
         .unwrap();
 
     let endpoint = qp_builder.endpoint();
+    
     let mut qp = qp_builder.handshake(endpoint).unwrap();
 
     let mut mr1 = pd.allocate::<u64>(2).unwrap();

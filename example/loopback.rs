@@ -33,7 +33,7 @@ async fn main() {
             Box::new(simple_callback)
         );
     let _result = rpc_core.start();
-    rpc_core.dispatcher.connect_to(0, "");
+    let _result = rpc_core.dispatcher.connect_to(0, "").await;
 
     loop {
         // push request 
@@ -46,7 +46,7 @@ async fn main() {
         req.set_msg(msg);
         rpc_core.dispatcher.push_req(req); 
 
-        // run evnet loop 
+        // run event loop 
         rpc_core.dispatcher.run_loop_once();
     }
 
