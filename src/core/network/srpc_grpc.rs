@@ -40,26 +40,26 @@ impl PreCommService for SrpcGrpcPreComm {
         // serialize designated endpoint 
         let pd = IBVERBS_PD.get().unwrap();
         let cq = IBVERBS_CQ.get().unwrap();
-        // let qp_builder = pd.create_qp(
-        //     &cq, 
-        //     &cq, 
-        //     ibverbs::ibv_qp_type::IBV_QPT_RC
-        // ).build().unwrap();
-        // let endpoint = qp_builder.endpoint();
-        // let qp = qp_builder.handshake(src_endpoint).unwrap();
+        let qp_builder = pd.create_qp(
+            &cq, 
+            &cq, 
+            ibverbs::ibv_qp_type::IBV_QPT_RC
+        ).build().unwrap();
+        let endpoint = qp_builder.endpoint();
+        let qp = qp_builder.handshake(src_endpoint).unwrap();
         
-        // let session_id = RpcSession::get_session_id(); 
-        // info!("qp_map insert session_id: {}", session_id);
-        // IBVERBS_QP_MAP.get().unwrap().lock().unwrap()
-        //     .insert(session_id, qp);
+        let session_id = RpcSession::get_session_id(); 
+        info!("qp_map insert session_id: {}", session_id);
+        IBVERBS_QP_MAP.get().unwrap().lock().unwrap()
+            .insert(session_id, qp);
 
-        // let mut serializer = 
-        //     flexbuffers::FlexbufferSerializer::new();
-        // endpoint.serialize(&mut serializer).unwrap();
-        // let endpoint_bin = serializer.view();
-        // let endpoint_bin_vec = endpoint_bin.to_vec();
+        let mut serializer = 
+            flexbuffers::FlexbufferSerializer::new();
+        endpoint.serialize(&mut serializer).unwrap();
+        let endpoint_bin = serializer.view();
+        let endpoint_bin_vec = endpoint_bin.to_vec();
 
-        let endpoint_bin_vec = LOCAL_ENDPOINT.get().unwrap();
+        // let endpoint_bin_vec = LOCAL_ENDPOINT.get().unwrap();
 
         let response = GetEndpointResponse {
             endpoint: endpoint_bin_vec.to_vec()
