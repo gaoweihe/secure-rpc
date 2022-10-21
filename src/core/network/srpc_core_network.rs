@@ -22,7 +22,7 @@ use tracing::error;
 #[allow(unused_imports)]
 use tracing::{info, trace};
 
-use crate::core::{srpc_core::{RPC_DISPATCHER, get_mut_from_immut}, network::srpc_grpc::SrpcGrpcPreComm};
+use crate::{core::{srpc_core::{RPC_DISPATCHER, get_mut_from_immut}, network::srpc_grpc::SrpcGrpcPreComm}, conf::conf::RPC_CONF};
 pub static IBVERBS_QP_MAP: OnceCell<std::sync::Arc<std::sync::Mutex<
     std::collections::BTreeMap<u32, ibverbs::QueuePair>
     >>> = OnceCell::new(); // session_id -> queue pair 
@@ -123,6 +123,8 @@ impl RpcNetworkCore
 
     fn init_infiniband(&self)
     {
+        let conf = RPC_CONF.get().unwrap();
+
         let ctx = ibverbs::devices().unwrap()
             .iter().next().expect("no rdma device available")
             .open().unwrap();
@@ -143,14 +145,15 @@ impl RpcNetworkCore
 
         let pd = IBVERBS_PD.get().unwrap();
         let mut mr_vec = Vec::new();
+        let mr_size = conf.loc_mr_size as usize;
         for _i in 0..16
         {
-            let mr = pd.allocate::<u8>(2048).unwrap();
+            let mr = pd.allocate::<u8>(mr_size).unwrap();
             mr_vec.push(mr);
         }
         let _result = IBVERBS_MR_VEC.set(mr_vec);
 
-        tokio::spawn(async move {
+        let _handle = tokio::spawn(async move {
             let cq = IBVERBS_CQ.get().unwrap();
 
             let mut completions = [ibverbs::ibv_wc::default(); 16];
@@ -250,9 +253,15 @@ impl RpcNetworkCore
 
     pub fn send_to(&self, session_id: u32, bin: &[u8])
     {
+        let conf = RPC_CONF.get().unwrap();
+        let mr_size = conf.loc_mr_size as usize;
+
         let data_len = bin.len();
         trace!("send_to: session_id = {}, data_len = {}", session_id, data_len);
-        trace!("send_to: raw_msg_len = {:?}", u16::from_be_bytes([bin[2046], bin[2047]]));
+        trace!("send_to: raw_msg_len = {:?}", u16::from_be_bytes([
+            bin[mr_size - 2], 
+            bin[mr_size - 1]]
+        ));
 
         // invoke network to send request
         let qp_map = IBVERBS_QP_MAP.get().unwrap();
@@ -267,7 +276,14 @@ impl RpcNetworkCore
             .lock().unwrap()
             .insert(wr_id, session_id);
         unsafe { 
-            qp.post_receive(&mut mr_recv, std::ops::Range{ start: 0, end: 2048}, wr_id) 
+            qp.post_receive(
+                &mut mr_recv, 
+                std::ops::Range{ 
+                    start: 0, 
+                    end: conf.loc_mr_size as usize
+                }, 
+                wr_id
+            ) 
         }.unwrap();
         trace!("post_receive: wr_id = {}", wr_id);
 
@@ -279,7 +295,14 @@ impl RpcNetworkCore
             .lock().unwrap()
             .insert(wr_id, session_id);
         unsafe { 
-            qp.post_send(&mut mr_send, std::ops::Range{ start: 0, end: 2048}, wr_id) 
+            qp.post_send(
+                &mut mr_send, 
+                std::ops::Range{ 
+                    start: 0, 
+                    end: conf.loc_mr_size as usize
+                }, 
+                wr_id
+            )
         }.unwrap();
         trace!("post_send: wr_id = {}", wr_id);
 
@@ -287,6 +310,9 @@ impl RpcNetworkCore
 
     pub fn on_recv(wr_id: u64)
     {
+        let conf = RPC_CONF.get().unwrap();
+        let mr_size = conf.loc_mr_size as usize;
+
         let session_id = Self::get_session_id_by_wr_id(wr_id);
         let mr_index = Self::get_mr_index_by_wr_id(wr_id).unwrap();
 
@@ -295,10 +321,13 @@ impl RpcNetworkCore
         let mr = IBVERBS_MR_VEC.get().unwrap()
             .get(mr_index as usize).unwrap();
         let mr_mut = unsafe { get_mut_from_immut(mr) };
-        let raw_msg_len = u16::from_be_bytes([mr_mut[2046], mr_mut[2047]]);
+        let raw_msg_len = u16::from_be_bytes([
+            mr_mut[mr_size - 2], 
+            mr_mut[mr_size - 1]
+            ]);
         trace!("on_recv: raw_msg_len = {:?}", raw_msg_len);
         
-        let mut mr_vec = vec![0; 2048];
+        let mut mr_vec = vec![0; mr_size];
         let mr_slice = mr_vec.as_mut_slice();
         trace!("mr_slice.len() = {}", mr_slice.len());
         mr_mut.swap_with_slice(mr_slice);

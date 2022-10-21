@@ -624,8 +624,7 @@ dependencies = [
 [[package]]
 name = "ibverbs"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d159703742653153bc52b83a2c0bf1a40333cbe441bfe9f5fb23091e0a9fc9d5"
+source = "git+https://gitee.com/gaoweihe/rust-ibverbs.git#4e85f1d8c381066905ed52cf2cc7bc93f76eb533"
 dependencies = [
  "ibverbs-sys",
  "serde",
@@ -634,8 +633,7 @@ dependencies = [
 [[package]]
 name = "ibverbs-sys"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86fabbe7a92ccd5101fac5778cfca2ed4d665f6e8dcb3140ea9d9f1e9c91e849"
+source = "git+https://gitee.com/gaoweihe/rust-ibverbs.git#4e85f1d8c381066905ed52cf2cc7bc93f76eb533"
 dependencies = [
  "bindgen",
 ]
@@ -1139,6 +1137,7 @@ dependencies = [
  "flexbuffers",
  "futures",
  "ibverbs",
+ "lazy_static",
  "once_cell",
  "prost",
  "serde",

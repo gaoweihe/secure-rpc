@@ -8,13 +8,16 @@ pub static RPC_CONF: once_cell::sync::OnceCell<RpcConf> =
 #[derive(Debug, Clone)]
 pub struct RpcConf {
     pub rmt_grpc_uri: Vec<String>, 
+    pub loc_mr_size: u32, 
 }
 
 impl RpcConf {
     fn new_singleton() -> Self {
         let mut rmt_grpc_uri = Vec::new();
+        let loc_mr_size = 0;
         let mut conf = Self {
-            rmt_grpc_uri,
+            rmt_grpc_uri, 
+            loc_mr_size,
         };
         conf
     }
@@ -36,6 +39,12 @@ impl RpcConf {
                     &["--peer"], 
                     List, 
                     "Remote gRPC URI. "
+                );
+            ap.refer(&mut conf.loc_mr_size)
+                .add_option(
+                    &["--mrsize"], 
+                    Store, 
+                    "Local memory region size. "
                 );
             
             ap.parse_args_or_exit(); 

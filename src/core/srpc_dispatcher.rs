@@ -4,6 +4,7 @@ use serde::{Serialize, Deserialize};
 #[allow(unused_imports)]
 use tracing::{info, trace};
 
+use crate::conf::conf::RPC_CONF;
 use crate::msg::srpc_msg::{RpcMsgHandle, RpcOnceMsg};
 use crate::core::srpc_core::RPC_CORE;
 use crate::core::network::srpc_core_network::RpcNetworkCore; 
@@ -108,8 +109,14 @@ impl RpcDispatcher
     }
 
     pub fn on_recv_msg(&self, session_id: u32, bin: &[u8])
-    {
-        let raw_len = u16::from_be_bytes([bin[2046], bin[2047]]) as usize;
+    {  
+        let conf = RPC_CONF.get().unwrap();
+        let mr_size = conf.loc_mr_size as usize;
+
+        let raw_len = u16::from_be_bytes([
+            bin[mr_size - 2], 
+            bin[mr_size - 1]
+        ]) as usize;
         trace!("on_recv_msg: raw_len {}", raw_len);
         let raw_msg = &bin[..raw_len];
         trace!("on_recv_msg: raw_msg.len() {}", raw_msg.len());
@@ -184,6 +191,9 @@ impl RpcDispatcher
 
     fn check_send_req(&self)
     {
+        let conf = RPC_CONF.get().unwrap();
+        let mr_size = conf.loc_mr_size as usize;
+
         let mut queue_lock = self.send_req_queue.write().unwrap();
         let len = queue_lock.len();
         for _ in 0..len {
@@ -202,11 +212,11 @@ impl RpcDispatcher
             trace!("check_send_req: flexbuff msg_bin len= {:?}", raw_msg_bin_len);
             let mut msg_bin = msg_bin.to_vec();
 
-            msg_bin.resize(2048, 0);
+            msg_bin.resize(mr_size, 0);
             let msg_bin = msg_bin.as_mut_slice();
             trace!("check_send_req: resize msg_bin len= {:?}", msg_bin.len());
-            msg_bin[2046] = raw_msg_bin_len.to_be_bytes()[0];
-            msg_bin[2047] = raw_msg_bin_len.to_be_bytes()[1];
+            msg_bin[mr_size - 2] = raw_msg_bin_len.to_be_bytes()[0];
+            msg_bin[mr_size - 1] = raw_msg_bin_len.to_be_bytes()[1];
 
             let session_id = self.get_session_id_by_peer_id(
                 msg_handle.peer_id).unwrap();
