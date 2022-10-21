@@ -87,8 +87,6 @@ impl RpcDispatcher
 
     pub async fn connect_to(&self, peer_id: u32, peer_uri: &str) -> Result<u32, Box<dyn std::error::Error>>
     {
-        info!("connect_to: peer_id: {}, peer_uri: {}", peer_id, peer_uri);
-
         let session_id = RpcSession::get_session_id();
 
         let _ = self.network.connect_to(session_id, peer_uri).await;

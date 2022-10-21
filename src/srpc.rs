@@ -22,7 +22,7 @@ async fn main() {
 
     // set tracer 
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::TRACE)
+        .with_max_level(Level::INFO)
         .finish();
     tracing::subscriber::set_global_default(subscriber)
         .expect("setting default subscriber failed"); 
@@ -42,26 +42,27 @@ async fn main() {
     let rmt_grpc_uri = conf.rmt_grpc_uri
         .get(0).unwrap(); 
     let peer_id = 1;
+
     let _session_id = 
         rpc_core.dispatcher.connect_to(peer_id, rmt_grpc_uri).await;
 
-    // push request 
-    let mut req = RpcMsgHandle::default();
-    let mut msg = RpcOnceMsg::default();
-    msg.req_type = 1;
-    let raw_str = "hello"; 
-    info!("main: push_req: {:?}", raw_str);
-    msg.payload.msg_data = raw_str.as_bytes().to_vec();
-    req.set_msg(msg);
-    req.peer_id = peer_id;
-
-    // sleep for 2 seconds
-    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-    rpc_core.dispatcher.push_req(req.clone()); 
-    // rpc_core.dispatcher.push_req(req.clone()); 
+    // sleep for 1 second(s)
+    // for better trace log (optional) 
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     loop {
-        // run evnet loop 
+        // push request 
+        let mut req = RpcMsgHandle::default();
+        let mut msg = RpcOnceMsg::default();
+        msg.req_type = 1;
+        let raw_str = "hello"; 
+        info!("main: push_req: {:?}", raw_str);
+        msg.payload.msg_data = raw_str.as_bytes().to_vec();
+        req.set_msg(msg);
+        req.peer_id = peer_id;
+        rpc_core.dispatcher.push_req(req);  
+
+        // run event loop
         rpc_core.dispatcher.run_loop_once();
     }
 

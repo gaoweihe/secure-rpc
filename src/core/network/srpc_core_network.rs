@@ -1,3 +1,6 @@
+pub static LOCAL_ENDPOINT: once_cell::sync::OnceCell<std::sync::Arc<Vec<u8>>> = 
+    OnceCell::new();
+
 #[derive(Debug)]
 pub struct RpcNetworkCore
 {
@@ -14,6 +17,7 @@ unsafe impl Sync for RpcNetworkCore {}
 use ibverbs::MemoryRegion;
 use once_cell::sync::OnceCell;
 
+use serde::Serialize;
 use tracing::error;
 #[allow(unused_imports)]
 use tracing::{info, trace};
@@ -298,7 +302,6 @@ impl RpcNetworkCore
         let mr_slice = mr_vec.as_mut_slice();
         trace!("mr_slice.len() = {}", mr_slice.len());
         mr_mut.swap_with_slice(mr_slice);
-        trace!("mr_slice: {:?}", mr_slice);
 
         RPC_DISPATCHER.get().unwrap().on_recv_msg(session_id, mr_slice);
     }
@@ -326,6 +329,7 @@ impl RpcNetworkCore
     // FIXME: change return value to Result<> type 
     pub async fn connect_to(&self, session_id: u32, peer_uri: &str) -> bool
     {
+        trace!("connect_to: session_id = {}, peer_uri = {}", session_id, peer_uri);
         self.conn_map.write().unwrap()
             .insert(session_id, (Vec::new(), Vec::new()));
         
@@ -340,6 +344,15 @@ impl RpcNetworkCore
         let loc_endpoint = 
             qp_builder.endpoint(); // local endpoint 
         info!("local endpoint = {:?}", loc_endpoint);
+
+        let mut serializer = 
+            flexbuffers::FlexbufferSerializer::new(); 
+        loc_endpoint.serialize(&mut serializer).unwrap();
+        let endpoint_bin = serializer.view();
+        let endpoint_bin_vec = endpoint_bin.to_vec();
+        LOCAL_ENDPOINT.set(
+            std::sync::Arc::new(endpoint_bin_vec)
+        ).unwrap();
 
         let rmt_endpoint = 
             SrpcGrpcPreComm::get_endpoint(
