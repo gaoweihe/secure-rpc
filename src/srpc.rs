@@ -50,17 +50,18 @@ async fn main() {
     // for better trace log (optional) 
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
+    let mut req = RpcMsgHandle::default();
+    let mut msg = RpcOnceMsg::default();
+    msg.req_type = 1;
+    let raw_str = "hello"; 
+    info!("main: push_req: {:?}", raw_str);
+    msg.payload.msg_data = raw_str.as_bytes().to_vec();
+    req.set_msg(msg);
+    req.peer_id = peer_id;
+
     loop {
         // push request 
-        let mut req = RpcMsgHandle::default();
-        let mut msg = RpcOnceMsg::default();
-        msg.req_type = 1;
-        let raw_str = "hello"; 
-        info!("main: push_req: {:?}", raw_str);
-        msg.payload.msg_data = raw_str.as_bytes().to_vec();
-        req.set_msg(msg);
-        req.peer_id = peer_id;
-        rpc_core.dispatcher.push_req(req);  
+        rpc_core.dispatcher.push_req(req.clone());  
 
         // run event loop
         rpc_core.dispatcher.run_loop_once();
