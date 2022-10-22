@@ -1,4 +1,6 @@
 use tracing::{info};
+
+#[allow(unused_imports)]
 use argparse::{ArgumentParser, Store, StoreTrue, List};
 
 use once_cell::sync::OnceCell;
@@ -13,9 +15,9 @@ pub struct RpcConf {
 
 impl RpcConf {
     fn new_singleton() -> Self {
-        let mut rmt_grpc_uri = Vec::new();
+        let rmt_grpc_uri = Vec::new();
         let loc_mr_size = 0;
-        let mut conf = Self {
+        let conf = Self {
             rmt_grpc_uri, 
             loc_mr_size,
         };
@@ -23,7 +25,6 @@ impl RpcConf {
     }
 
     pub fn init_conf() {
-        let conf = Self::new_singleton();
         Self::parse_args();
     }
 

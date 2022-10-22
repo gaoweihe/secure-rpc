@@ -11,9 +11,6 @@ use tracing::info;
 use tracing::trace;
 use tracing::{error};
 
-use crate::core::network::srpc_core_network::IBVERBS_QP_MAP;
-use crate::core::srpc_session::RpcSession;
-
 use super::srpc_core_network::IBVERBS_CQ;
 use super::srpc_core_network::IBVERBS_PD;
 use super::srpc_core_network::LOCAL_ENDPOINT;
@@ -23,6 +20,7 @@ use super::srpc_core_network::LOCAL_ENDPOINT;
 #[derive(Debug)]
 pub struct SrpcGrpcPreComm { } 
 
+#[allow(unused_variables)]
 #[tonic::async_trait]
 impl PreCommService for SrpcGrpcPreComm {
     async fn get_endpoint(

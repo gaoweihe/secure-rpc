@@ -21,7 +21,7 @@ pub static RPC_DISPATCHER: once_cell::sync::OnceCell<
     std::sync::Arc<RpcDispatcher>
     > = OnceCell::new();
 
-use super::{srpc_dispatcher::RpcDispatcher, network::srpc_core_network::RpcNetworkCore};
+use super::{srpc_dispatcher::RpcDispatcher};
 
 #[derive(PartialEq, Debug)]
 pub enum RpcCoreStatus {
