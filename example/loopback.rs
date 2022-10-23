@@ -35,7 +35,7 @@ async fn main() {
     let pd = PROTECTION_DOMAIN.get().unwrap();
 
     COMPLETION_QUEUE.set(
-        ctx.create_cq(16, 0).unwrap()
+        ctx.create_cq(32, 0).unwrap()
     ).unwrap();
     let cq = COMPLETION_QUEUE.get().unwrap();
 
@@ -43,9 +43,9 @@ async fn main() {
 
     let qp_builder = pd.create_qp(
         &cq, 
-        1, 
+        8, 
         &cq, 
-        1, 
+        8, 
         ibverbs::ibv_qp_type::IBV_QPT_RC
     ).build().unwrap();
 
@@ -58,14 +58,14 @@ async fn main() {
     let pd_post = pd.clone();
     let cq_post = cq.clone(); 
     let post_handle = tokio::spawn(async move {
-        let mut mr1 = pd_post.allocate::<u64>(2).unwrap();
-        let mut mr2 = pd_post.allocate::<u64>(2).unwrap();
+        let mut mr1 = pd_post.allocate::<u64>(409600).unwrap();
+        let mut mr2 = pd_post.allocate::<u64>(409600).unwrap();
         mr1[1] = 0x42; 
 
         // get current time 
         let start = std::time::Instant::now(); 
 
-        while req_cnt < 200000 {
+        while req_cnt < 2000 {
             // let wr_id = wrid_cnt.fetch_add(
             //     1, 
             //     std::sync::atomic::Ordering::SeqCst
@@ -108,18 +108,20 @@ async fn main() {
         // print the elapsed time
         info!("Elapsed: {:?} ns", elapsed.as_nanos());
 
+        std::process::exit(exitcode::OK);
     });
 
     let cq_poll = cq.clone();
     let poll_handle = tokio::spawn(async move {
-        let mut completions = [ibverbs::ibv_wc::default(); 16];
+        let mut completions = [ibverbs::ibv_wc::default(); 32];
         loop {
             let completed = cq_poll.poll(&mut completions[..]).unwrap();
             if completed.is_empty() {
                 continue;
             }
-            for wr in completed {
-                match wr.opcode() {
+            // info!("completed len: {:?}", completed.len());
+            for wc in completed {
+                match wc.opcode() {
                     ibverbs::ibv_wc_opcode::IBV_WC_SEND => {
                         // info!("sent");
                     }
@@ -127,7 +129,9 @@ async fn main() {
                         // assert_eq!(mr2[0], 0x42);
                         // info!("received");
                     }
-                    _ => unreachable!(),
+                    _ => {
+                        panic!("unexpected completion code {:?}", wc.opcode());
+                    },
                 }
             }
         }
