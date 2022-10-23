@@ -11,7 +11,7 @@ fn main() {
     let pd = ctx.alloc_pd().unwrap();
 
     let qp_builder = pd
-        .create_qp(&cq, &cq, ibverbs::ibv_qp_type::IBV_QPT_RC)
+        .create_qp(&cq, 1, &cq, 1, ibverbs::ibv_qp_type::IBV_QPT_RC)
         .build()
         .unwrap();
 

@@ -367,7 +367,9 @@ impl RpcNetworkCore
         let cq = IBVERBS_CQ.get().unwrap();
         let qp_builder = pd.create_qp(
             &cq, 
+            1, 
             &cq, 
+            1, 
             ibverbs::ibv_qp_type::IBV_QPT_RC
         ).build().unwrap();
         let loc_endpoint = 
