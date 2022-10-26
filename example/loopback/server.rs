@@ -51,18 +51,17 @@ impl PreCommService for SrpcGrpcPreComm {
             ibverbs::QueuePairEndpoint::deserialize(reader).unwrap();
 
         // serialize designated endpoint 
-        let pd = PROTECTION_DOMAIN.get().unwrap();
-        let cq = RECEIVE_QUEUE.get().unwrap();
-        let qp_builder = pd.create_qp(
-            &cq, 
-            8, 
-            &cq, 
-            8,  
-            ibverbs::ibv_qp_type::IBV_QPT_RC
-        ).build().unwrap();
-        let endpoint = qp_builder.endpoint();
-        let ep_bin = serialize_endpoint(endpoint);
-        let qp = qp_builder.handshake(src_endpoint).unwrap();
+        // let pd = PROTECTION_DOMAIN.get().unwrap();
+        // let cq = RECEIVE_QUEUE.get().unwrap();
+        // let qp_builder = pd.create_qp(
+        //     &cq, 
+        //     8, 
+        //     &cq, 
+        //     8,  
+        //     ibverbs::ibv_qp_type::IBV_QPT_RC
+        // ).build().unwrap();
+        // let endpoint = qp_builder.endpoint();
+        // let qp = qp_builder.handshake(src_endpoint).unwrap();
 
         let loc_endpoint_bin_vec = 
             LOCAL_ENDPOINT.get().unwrap();
@@ -70,6 +69,9 @@ impl PreCommService for SrpcGrpcPreComm {
         let response = GetEndpointResponse {
             endpoint: loc_endpoint_bin_vec.to_vec()
         };
+
+        // sleep for 1 second to wait polling thread 
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         Ok(tonic::Response::new(response))
     }
@@ -103,12 +105,12 @@ async fn main() {
     let pd = PROTECTION_DOMAIN.get().unwrap();
 
     RECEIVE_QUEUE.set(
-        ctx.create_cq(32, 0).unwrap()
+        ctx.create_cq(1024, 0).unwrap()
     ).unwrap();
     let rq = RECEIVE_QUEUE.get().unwrap();
 
     SEND_QUEUE.set(
-        ctx.create_cq(32, 0).unwrap()
+        ctx.create_cq(8, 0).unwrap()
     ).unwrap();
     let sq = SEND_QUEUE.get().unwrap();
 
@@ -117,7 +119,7 @@ async fn main() {
         &sq, 
         8, 
         &rq, 
-        8, 
+        1024, 
         ibverbs::ibv_qp_type::IBV_QPT_RC
     ).build().unwrap();
 
@@ -140,31 +142,31 @@ async fn main() {
             .serve(addr)
     });
 
-    // poll for remote endpoint 
-    let rmt_ep: ibverbs::QueuePairEndpoint;
-    loop {
-        let ep_res = REMOTE_ENDPOINT.get();
-        match ep_res {
-            Some(ep_bin) => {
-                rmt_ep = deserialize_endpoint(ep_bin.to_vec());
-                info!("remote endpoint: {:?}", rmt_ep);
-                break;
-            },
-            None => {
-                info!("waiting for remote endpoint");
-                // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            }
-        }
-    }
-
-    // handshake with remote endpoint 
-    let mut qp = qp_builder.handshake(rmt_ep).unwrap();
-
     // start pushing receive requests 
     let push_handle = tokio::spawn(async move {
-        let mut mr = pd.allocate::<u8>(2).unwrap();
+        let mut mr = pd.allocate::<u8>(1048576).unwrap();
 
         let mut wr_id = 10000000;
+
+        // poll for remote endpoint 
+        let rmt_ep: ibverbs::QueuePairEndpoint;
+        loop {
+            let ep_res = REMOTE_ENDPOINT.get();
+            match ep_res {
+                Some(ep_bin) => {
+                    rmt_ep = deserialize_endpoint(ep_bin.to_vec());
+                    info!("remote endpoint: {:?}", rmt_ep);
+                    break;
+                },
+                None => {
+                    info!("waiting for remote endpoint");
+                    // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+            }
+        }
+
+        // handshake with remote endpoint 
+        let mut qp = qp_builder.handshake(rmt_ep).unwrap();
 
         loop {
             let result = unsafe { 
@@ -185,28 +187,26 @@ async fn main() {
     // start polling receive requests
     let rq_poll = rq.clone();
     let poll_handle = tokio::spawn(async move {
-        let mut completions = [ibverbs::ibv_wc::default(); 32];
-
-        // let mut req_cnt = 0;
+        let mut completions = [ibverbs::ibv_wc::default(); 100];
 
         loop {
             let completed = rq_poll.poll(&mut completions[..]).unwrap();
             if completed.is_empty() {
                 continue;
             }
-            // for wc in completed {
-            //     match wc.opcode() {
-            //         ibverbs::ibv_wc_opcode::IBV_WC_RECV => {
-            //         }
-            //         _ => {
-            //             panic!("unexpected completion code {:?}", wc.opcode());
-            //         },
-            //     }
-            // }
+            for wc in completed {
+                match wc.opcode() {
+                    ibverbs::ibv_wc_opcode::IBV_WC_RECV => {
+                    }
+                    _ => {
+                        panic!("unexpected completion code {:?}", wc.opcode());
+                    },
+                }
+            }
         }
     }); 
 
     push_handle.await.unwrap();
     poll_handle.await.unwrap();
-    grpc_handle.await.unwrap();
+    grpc_handle.await.unwrap().unwrap();
 }
