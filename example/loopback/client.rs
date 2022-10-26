@@ -169,6 +169,9 @@ async fn main() {
 
         let mut wr_id = 10000000;
 
+        // record current time 
+        let start = std::time::Instant::now();
+
         loop {
             let result = unsafe { 
                 qp.post_send(&mut mr, .., wr_id) 
@@ -177,19 +180,34 @@ async fn main() {
                 Ok(_) => {
                     wr_id += 1;
                     // info!("post_send: OK: wr_id = {}", wr_id);
-                },
+                    if wr_id >= 10000000 + 1000 {
+                        break;
+                    }  
+                }, 
                 Err(e) => {
                     // info!("post_send: Err: {:?}", e);
                 }
             }
         }
+
+        // record current time
+        let end = std::time::Instant::now();
+
+        // calculate time elapsed
+        let elapsed = end - start;
+
+        // print time elapsed
+        info!("elapsed: {:?}", elapsed);
+
+        // exit program 
+        std::process::exit(0);
     });
 
     let sq_poll = sq.clone();
     let poll_handle = tokio::spawn(async move {
         let mut completions = [ibverbs::ibv_wc::default(); 32];
 
-        let mut req_cnt = 0;
+        // let mut req_cnt = 0;
 
         loop {
             let completed = sq_poll.poll(&mut completions[..]).unwrap();
@@ -199,10 +217,10 @@ async fn main() {
             for wc in completed {
                 match wc.opcode() {
                     ibverbs::ibv_wc_opcode::IBV_WC_SEND => {
-                        req_cnt += 1;
-                        if req_cnt >= 1000 {
-                            std::process::exit(0x0000);
-                        }
+                        // req_cnt += 1;
+                        // if req_cnt >= 1000 {
+                        //     std::process::exit(0x0000);
+                        // }
                     }
                     _ => {
                         panic!("unexpected completion code {:?}", wc.opcode());

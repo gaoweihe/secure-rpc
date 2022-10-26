@@ -152,7 +152,7 @@ async fn main() {
             },
             None => {
                 info!("waiting for remote endpoint");
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
         }
     }
@@ -187,28 +187,22 @@ async fn main() {
     let poll_handle = tokio::spawn(async move {
         let mut completions = [ibverbs::ibv_wc::default(); 32];
 
-        let mut req_cnt = 0;
+        // let mut req_cnt = 0;
 
         loop {
             let completed = rq_poll.poll(&mut completions[..]).unwrap();
             if completed.is_empty() {
                 continue;
             }
-            for wc in completed {
-                match wc.opcode() {
-                    ibverbs::ibv_wc_opcode::IBV_WC_RECV => {
-                        req_cnt += 1; 
-                        // on enough requests received 
-                        if req_cnt >= 1000 {
-                            info!("recv 1000 reqs");
-                            // std::process::exit(0x0000);
-                        }
-                    }
-                    _ => {
-                        panic!("unexpected completion code {:?}", wc.opcode());
-                    },
-                }
-            }
+            // for wc in completed {
+            //     match wc.opcode() {
+            //         ibverbs::ibv_wc_opcode::IBV_WC_RECV => {
+            //         }
+            //         _ => {
+            //             panic!("unexpected completion code {:?}", wc.opcode());
+            //         },
+            //     }
+            // }
         }
     }); 
 
