@@ -12,6 +12,24 @@ pub mod precomm_grpc {
 }
 use precomm_grpc::pre_comm_service_client::*; 
 
+#[derive(Debug, Clone)]
+pub struct RpcConf {
+    pub rmt_grpc_uri: String, 
+}
+
+impl RpcConf {
+    pub fn new() -> Self {
+        let rmt_grpc_uri = String::new();
+        let conf = Self {
+            rmt_grpc_uri, 
+        };
+        conf
+    }
+}
+
+pub static RPC_CONF: once_cell::sync::OnceCell<RpcConf> = 
+    once_cell::sync::OnceCell::new();
+
 static CONTEXT: once_cell::sync::OnceCell<ibverbs::Context> = 
     once_cell::sync::OnceCell::new(); 
 static PROTECTION_DOMAIN: once_cell::sync::OnceCell<std::sync::Arc<ibverbs::ProtectionDomain>> = 
@@ -25,6 +43,30 @@ static LOCAL_ENDPOINT: once_cell::sync::OnceCell<std::sync::Arc<Vec<u8>>> =
 static REMOTE_ENDPOINT: once_cell::sync::OnceCell<std::sync::Arc<Vec<u8>>> = 
     once_cell::sync::OnceCell::new();
 
+fn parse_args() {
+    use argparse::{ ArgumentParser, Store }; 
+
+    let mut conf = RpcConf::new();
+
+    {
+        let mut ap = ArgumentParser::new(); 
+        ap.set_description("Secure RPC service. ");
+
+        ap.refer(&mut conf.rmt_grpc_uri)
+            .add_option(
+                &["--server"], 
+                Store, 
+                "Remote gRPC URI. "
+            );
+        
+        ap.parse_args_or_exit(); 
+    }
+
+    RPC_CONF.get_or_init(|| {
+        conf
+    });
+}
+
 #[allow(unused_variables)]
 #[tokio::main]
 async fn main() {
@@ -34,6 +76,10 @@ async fn main() {
         .finish();
     tracing::subscriber::set_global_default(subscriber)
         .expect("setting default subscriber failed"); 
+
+    // parse CLI-input arguments 
+    parse_args();
+    info!("RPC_CONF: {:?}", RPC_CONF.get().unwrap());
 
     CONTEXT.set(
         ibverbs::devices()
@@ -80,9 +126,28 @@ async fn main() {
     ).unwrap(); 
 
     // send grpc request to get remote endpoint 
-    let mut client = 
-        PreCommServiceClient::connect("http://[::1]:50051")
-            .await.unwrap();
+    let conf = RPC_CONF.get().unwrap();
+    let rmt_uri = conf.rmt_grpc_uri.clone();
+    let client_res = 
+        PreCommServiceClient::connect(rmt_uri)
+            .await;
+    
+    let mut client;
+    loop {
+        match client_res {
+            Ok(client_some) => {
+                client = client_some;
+                break;
+            },
+            Err(ref e) => {
+                info!("connect to remote gRPC server failed: {:?}", e);
+            }
+        }
+
+        // sleep for one second 
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+
     let request = tonic::Request::new(GetEndpointRequest {
         src_endpoint: LOCAL_ENDPOINT.get().unwrap().to_vec(),
     });
