@@ -134,9 +134,11 @@ async fn main() {
     // gRPC start listening 
     let addr = format!("0.0.0.0:50051").parse().unwrap(); 
     info!("SrpcGrpcPreComm: trying to serve on {:?}", addr);
-    let grpc_handle = tonic::transport::Server::builder()
-        .add_service(PreCommServiceServer::new(SrpcGrpcPreComm {}))
-        .serve(addr);
+    let grpc_handle = tokio::spawn({
+        tonic::transport::Server::builder()
+            .add_service(PreCommServiceServer::new(SrpcGrpcPreComm {}))
+            .serve(addr)
+    });
 
     // poll for remote endpoint 
     let rmt_ep: ibverbs::QueuePairEndpoint;
