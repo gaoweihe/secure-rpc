@@ -131,6 +131,13 @@ async fn main() {
         std::sync::Arc::new(ep_bin)
     ).unwrap();
 
+    // gRPC start listening 
+    let addr = format!("0.0.0.0:50051").parse().unwrap(); 
+    info!("SrpcGrpcPreComm: trying to serve on {:?}", addr);
+    let grpc_handle = tonic::transport::Server::builder()
+        .add_service(PreCommServiceServer::new(SrpcGrpcPreComm {}))
+        .serve(addr);
+
     // poll for remote endpoint 
     let rmt_ep: ibverbs::QueuePairEndpoint;
     loop {
@@ -205,4 +212,5 @@ async fn main() {
 
     push_handle.await.unwrap();
     poll_handle.await.unwrap();
+    grpc_handle.await.unwrap();
 }
