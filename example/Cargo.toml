@@ -26,3 +26,7 @@ tonic-build = "0.7"
 [[bin]]
 name = "loopback-server"
 path = "loopback/server.rs"
+
+[[bin]]
+name = "loopback-client"
+path = "loopback/client.rs"
