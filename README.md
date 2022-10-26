@@ -1,10 +1,18 @@
 # Secure RPC 
 Secure RPC service. 
 
-## Run the demo 
-RPC demo: `cargo run --bin srpc -- --peer http://127.0.0.1:9000` 
+## Run the perf test  
+On server side: 
+```
+cd /path/to/project/example
+cargo run --release --bin loopback-server
+``` 
 
-IBverbs test: `cargo run --bin ibverbs` 
+On client side: 
+```
+cd /path/to/project/example
+cargo run --release --bin loopback-client -- --server http://10.0.0.11:50051
+```
 
 ## Source files
 
