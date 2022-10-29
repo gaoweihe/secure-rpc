@@ -38,6 +38,8 @@ impl PreCommService for SrpcGrpcPreComm {
         let src_endpoint = 
             ibverbs::QueuePairEndpoint::deserialize(reader).unwrap();
 
+        info!("gRPC srv src_endpoint: {:?}", src_endpoint);
+
         // serialize designated endpoint 
         let pd = IBVERBS_PD.get().unwrap();
         let sq = IBVERBS_SQ.get().unwrap();
@@ -123,8 +125,6 @@ impl SrpcGrpcPreComm {
         let mut serializer = 
             flexbuffers::FlexbufferSerializer::new(); 
         loc_endpoint.serialize(&mut serializer).unwrap();
-
-        info!("loc_endpoint: {:?}", loc_endpoint);
 
         let endpoint_bin = serializer.view();
         let endpoint_bin_vec = endpoint_bin.to_vec();

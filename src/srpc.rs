@@ -22,7 +22,7 @@ async fn main() {
 
     // set tracer 
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(Level::INFO)
+        .with_max_level(Level::TRACE)
         .finish();
     tracing::subscriber::set_global_default(subscriber)
         .expect("setting default subscriber failed"); 
@@ -54,15 +54,14 @@ async fn main() {
     let mut msg = RpcOnceMsg::default();
     msg.req_type = 1;
     let raw_str = "hello"; 
-    info!("main: push_req: {:?}", raw_str);
     msg.payload.msg_data = raw_str.as_bytes().to_vec();
     req.set_msg(msg);
     req.peer_id = peer_id;
 
-    loop {
-        // push request 
-        rpc_core.dispatcher.push_req(req.clone());  
+    // push request 
+    rpc_core.dispatcher.push_req(req.clone());  
 
+    loop {
         // run event loop
         rpc_core.dispatcher.run_loop_once();
     }
