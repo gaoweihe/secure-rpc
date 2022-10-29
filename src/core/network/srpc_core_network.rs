@@ -5,16 +5,18 @@ pub static LOCAL_ENDPOINT: once_cell::sync::OnceCell<std::sync::Arc<Vec<u8>>> =
 pub struct RpcNetworkCore
 {
     // session_id -> session
-    conn_map: std::sync::Arc<std::sync::RwLock<std::collections::BTreeMap<
-        u32, (Vec<Vec<u8>>, Vec<Vec<u8>>)
-    >>>, 
+    conn_map: std::sync::Arc<std::sync::RwLock<
+        std::collections::BTreeMap<
+            u32, (Vec<Vec<u8>>, Vec<Vec<u8>>)
+        >
+    >>, 
     wr_cnt: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 unsafe impl Send for RpcNetworkCore {}
 unsafe impl Sync for RpcNetworkCore {}
 
-use ibverbs::MemoryRegion;
+use ibverbs::{MemoryRegion};
 use once_cell::sync::OnceCell;
 
 use serde::Serialize;
@@ -30,18 +32,31 @@ pub static IBVERBS_PD: OnceCell<std::sync::Arc<
     ibverbs::ProtectionDomain>> = OnceCell::new();
 pub static IBVERBS_CTX: OnceCell<std::sync::Arc<
     ibverbs::Context>> = OnceCell::new(); 
-pub static IBVERBS_CQ: OnceCell<std::sync::Arc<
+pub static IBVERBS_SQ: OnceCell<std::sync::Arc<
+    ibverbs::CompletionQueue>> = OnceCell::new();
+pub static IBVERBS_RQ: OnceCell<std::sync::Arc<
     ibverbs::CompletionQueue>> = OnceCell::new();
 pub static IBVERBS_WRID_MAP: OnceCell<std::sync::Arc<std::sync::Mutex<
     std::collections::BTreeMap<u64, u32>
     >>> = OnceCell::new(); // wr_id -> session_id
-pub static IBVERBS_MR_VEC: OnceCell<std::vec::Vec<
+// send memory region 
+pub static IBVERBS_SMR_VEC: OnceCell<std::vec::Vec<
     ibverbs::MemoryRegion<u8>
     >> = OnceCell::new(); // mr 
-pub static IBVERBS_MR_MAP: OnceCell<std::sync::Arc<std::sync::Mutex<
+pub static IBVERBS_SMR_MAP: OnceCell<std::sync::Arc<std::sync::Mutex<
     std::collections::BTreeMap<u64, u32>
     >>> = OnceCell::new(); // wr_id -> mr_index 
-pub static IBVERBS_MR_MAP_INV: OnceCell<std::sync::Arc<std::sync::Mutex<
+pub static IBVERBS_SMR_MAP_INV: OnceCell<std::sync::Arc<std::sync::Mutex<
+    std::collections::BTreeMap<u32, u64>
+    >>> = OnceCell::new(); // mr_index -> wr_id 
+// receive memory region 
+pub static IBVERBS_RMR_VEC: OnceCell<std::vec::Vec<
+    ibverbs::MemoryRegion<u8>
+    >> = OnceCell::new(); // mr 
+pub static IBVERBS_RMR_MAP: OnceCell<std::sync::Arc<std::sync::Mutex<
+    std::collections::BTreeMap<u64, u32>
+    >>> = OnceCell::new(); // wr_id -> mr_index 
+pub static IBVERBS_RMR_MAP_INV: OnceCell<std::sync::Arc<std::sync::Mutex<
     std::collections::BTreeMap<u32, u64>
     >>> = OnceCell::new(); // mr_index -> wr_id 
 
@@ -87,12 +102,22 @@ impl RpcNetworkCore
             std::sync::Mutex::new(
                 std::collections::BTreeMap::new()
             )));
-        let _result = IBVERBS_MR_MAP.set(
+        let _result = IBVERBS_SMR_MAP.set(
             std::sync::Arc::new(
             std::sync::Mutex::new(
                 std::collections::BTreeMap::new()
             )));
-        let _result = IBVERBS_MR_MAP_INV.set(
+        let _result = IBVERBS_SMR_MAP_INV.set(
+            std::sync::Arc::new(
+            std::sync::Mutex::new(
+                std::collections::BTreeMap::new()
+            )));
+        let _result = IBVERBS_RMR_MAP.set(
+            std::sync::Arc::new(
+            std::sync::Mutex::new(
+                std::collections::BTreeMap::new()
+            )));
+        let _result = IBVERBS_RMR_MAP_INV.set(
             std::sync::Arc::new(
             std::sync::Mutex::new(
                 std::collections::BTreeMap::new()
@@ -133,66 +158,88 @@ impl RpcNetworkCore
         );
 
         let ctx = IBVERBS_CTX.get().unwrap();
-        let cq = ctx.create_cq(16, 0).unwrap();
+        let sq = ctx.create_cq(16, 0).unwrap();
+        let rq = ctx.create_cq(16, 0).unwrap();
         let pd = ctx.alloc_pd().unwrap();
 
-        let _result = IBVERBS_CQ.set(
-            std::sync::Arc::new(cq)
+        let _result = IBVERBS_SQ.set(
+            std::sync::Arc::new(sq)
+        );
+        let _result = IBVERBS_RQ.set(
+            std::sync::Arc::new(rq)
         );
         let _result = IBVERBS_PD.set(
             std::sync::Arc::new(pd)
         );
 
         let pd = IBVERBS_PD.get().unwrap();
-        let mut mr_vec = Vec::new();
-        let mr_size = conf.loc_mr_size as usize;
-        for _i in 0..16
+        let mut smr_vec = Vec::new();
+        let smr_size = conf.loc_mr_size as usize;
+        for _i in 0..1024
         {
-            let mr = pd.allocate::<u8>(mr_size).unwrap();
-            mr_vec.push(mr);
+            let smr = pd.allocate::<u8>(smr_size).unwrap();
+            smr_vec.push(smr);
         }
-        let _result = IBVERBS_MR_VEC.set(mr_vec);
+        let _result = IBVERBS_SMR_VEC.set(smr_vec);
 
-        let _handle = tokio::spawn(async move {
-            let cq = IBVERBS_CQ.get().unwrap();
+        let mut rmr_vec = Vec::new();
+        let rmr_size = conf.loc_mr_size as usize;
+        for _i in 0..1024
+        {
+            let rmr = pd.allocate::<u8>(rmr_size).unwrap();
+            rmr_vec.push(rmr);
+        }
+        let _result = IBVERBS_RMR_VEC.set(rmr_vec);
 
-            let mut completions = [ibverbs::ibv_wc::default(); 16];
-            loop {
-                let completed = cq.poll(&mut completions[..]).unwrap();
-                if completed.is_empty() {
-                    continue;
-                }
-                assert!(completed.len() <= 2);
-                for wc in completed {
-                    match wc.opcode() {
-                        ibverbs::ibv_wc_opcode::IBV_WC_SEND => {
-                            let wr_id = wc.wr_id();
-                            trace!("IBV_WC_SEND wr_id={}", wr_id);
-                            Self::release_occupied_mr(wr_id);
-                        }
-                        ibverbs::ibv_wc_opcode::IBV_WC_RECV => {
-                            let wr_id = wc.wr_id();
-                            trace!("IBV_WC_RECV wr_id={}", wr_id);
-                            Self::on_recv(wr_id);
-                            Self::release_occupied_mr(wr_id);
-                        }
-                        _ => {
-                            error!("wc.opcode() = {:?}", wc.opcode());
-                            panic!("unexpected completion");
-                        }
+        let sq = IBVERBS_SQ.get().unwrap();
+        let rq = IBVERBS_RQ.get().unwrap();
+
+        let _pollsq_handle = tokio::spawn(async move {
+            Self::poll_cq(sq);
+        });
+        let _pollrq_handle = tokio::spawn(async move {
+            Self::poll_cq(rq);
+        }); 
+    }
+
+    fn poll_cq(cq: &std::sync::Arc<ibverbs::CompletionQueue>)
+    {
+        let mut completions = [ibverbs::ibv_wc::default(); 32];
+
+        loop {
+            let completed = cq.poll(&mut completions[..]).unwrap();
+            if completed.is_empty() {
+                continue;
+            }
+            for wc in completed {
+                match wc.opcode() {
+                    ibverbs::ibv_wc_opcode::IBV_WC_SEND => {
+                        let wr_id = wc.wr_id();
+                        trace!("IBV_WC_SEND wr_id={}", wr_id);
+                        Self::release_occupied_smr(wr_id);
+                    }
+                    ibverbs::ibv_wc_opcode::IBV_WC_RECV => {
+                        let wr_id = wc.wr_id();
+                        trace!("IBV_WC_RECV wr_id={}", wr_id);
+                        Self::on_recv(wr_id);
+                        Self::release_occupied_rmr(wr_id);
+                    }
+                    _ => {
+                        error!("unexpected completion wc.opcode() = {:?}", wc.opcode());
+                        // panic!("unexpected completion");
                     }
                 }
             }
-        });
+        }
     }
 
-    fn get_vacant_mr(&self, wr_id: u64) -> Option<&mut ibverbs::MemoryRegion<u8>>
+    fn get_vacant_smr(&self, wr_id: u64) -> Option<&mut ibverbs::MemoryRegion<u8>>
     {
-        let mut mr_map = IBVERBS_MR_MAP.get().unwrap()
+        let mut mr_map = IBVERBS_SMR_MAP.get().unwrap()
             .lock().unwrap(); // wr_id -> mr_index
-        let mut mr_map_inv = IBVERBS_MR_MAP_INV.get().unwrap()
+        let mut mr_map_inv = IBVERBS_SMR_MAP_INV.get().unwrap()
             .lock().unwrap(); // mr_index -> wr_id
-        let mr_vec_len = IBVERBS_MR_VEC.get().unwrap().len();
+        let mr_vec_len = IBVERBS_SMR_VEC.get().unwrap().len();
         for i in 0..mr_vec_len // mr_index 
         {
             let mr_index = i as u32;
@@ -201,7 +248,7 @@ impl RpcNetworkCore
                 mr_map.insert(wr_id, mr_index);
                 mr_map_inv.insert(mr_index, wr_id);
 
-                let vacant_mr = IBVERBS_MR_VEC.get().unwrap()
+                let vacant_mr = IBVERBS_SMR_VEC.get().unwrap()
                     .get(i).unwrap();
                 let vacant_mr_mut: &mut MemoryRegion<u8>;
                 unsafe {
@@ -214,11 +261,52 @@ impl RpcNetworkCore
         None
     }
 
-    fn release_occupied_mr(wr_id: u64)
+    fn get_vacant_rmr(&self, wr_id: u64) -> Option<&mut ibverbs::MemoryRegion<u8>>
     {
-        let mut mr_map = IBVERBS_MR_MAP.get().unwrap()
+        let mut mr_map = IBVERBS_RMR_MAP.get().unwrap()
             .lock().unwrap(); // wr_id -> mr_index
-        let mut mr_map_inv = IBVERBS_MR_MAP_INV.get().unwrap()
+        let mut mr_map_inv = IBVERBS_RMR_MAP_INV.get().unwrap()
+            .lock().unwrap(); // mr_index -> wr_id
+        let mr_vec_len = IBVERBS_RMR_VEC.get().unwrap().len();
+        for i in 0..mr_vec_len // mr_index 
+        {
+            let mr_index = i as u32;
+            if !mr_map_inv.contains_key(&mr_index)
+            {
+                mr_map.insert(wr_id, mr_index);
+                mr_map_inv.insert(mr_index, wr_id);
+
+                let vacant_mr = IBVERBS_RMR_VEC.get().unwrap()
+                    .get(i).unwrap();
+                let vacant_mr_mut: &mut MemoryRegion<u8>;
+                unsafe {
+                    vacant_mr_mut = get_mut_from_immut(vacant_mr);
+                }
+                trace!("get_vacant_mr: wr_id = {}, mr_index = {}", wr_id, mr_index);
+                return Some(vacant_mr_mut);
+            }
+        }
+        None
+    }
+
+    fn release_occupied_smr(wr_id: u64)
+    {
+        let mut mr_map = IBVERBS_SMR_MAP.get().unwrap()
+            .lock().unwrap(); // wr_id -> mr_index
+        let mut mr_map_inv = IBVERBS_SMR_MAP_INV.get().unwrap()
+            .lock().unwrap(); // mr_index -> wr_id
+        if mr_map.contains_key(&wr_id)
+        {
+            let mr_index = mr_map.remove(&wr_id).unwrap();
+            mr_map_inv.remove(&mr_index);
+        }
+    }
+
+    fn release_occupied_rmr(wr_id: u64)
+    {
+        let mut mr_map = IBVERBS_RMR_MAP.get().unwrap()
+            .lock().unwrap(); // wr_id -> mr_index
+        let mut mr_map_inv = IBVERBS_RMR_MAP_INV.get().unwrap()
             .lock().unwrap(); // mr_index -> wr_id
         if mr_map.contains_key(&wr_id)
         {
@@ -270,7 +358,7 @@ impl RpcNetworkCore
 
         let wr_id = self.get_wr_id();
         trace!("post_receive trying to get_vacant_mr: wr_id = {}", wr_id);
-        let mut mr_recv = self.get_vacant_mr(wr_id).unwrap(); 
+        let mut mr_recv = self.get_vacant_rmr(wr_id).unwrap(); 
 
         IBVERBS_WRID_MAP.get().unwrap()
             .lock().unwrap()
@@ -289,7 +377,7 @@ impl RpcNetworkCore
 
         let wr_id = self.get_wr_id();
         trace!("post_send trying to get_vacant_mr: wr_id = {}", wr_id);
-        let mut mr_send = self.get_vacant_mr(wr_id).unwrap(); 
+        let mut mr_send = self.get_vacant_smr(wr_id).unwrap(); 
         mr_send.clone_from_slice(bin);
         IBVERBS_WRID_MAP.get().unwrap()
             .lock().unwrap()
@@ -314,11 +402,11 @@ impl RpcNetworkCore
         let mr_size = conf.loc_mr_size as usize;
 
         let session_id = Self::get_session_id_by_wr_id(wr_id);
-        let mr_index = Self::get_mr_index_by_wr_id(wr_id).unwrap();
+        let mr_index = Self::get_rmr_index_by_wr_id(wr_id).unwrap();
 
         trace!("on_recv: wr_id = {}, mr_index = {}", wr_id, mr_index);
 
-        let mr = IBVERBS_MR_VEC.get().unwrap()
+        let mr = IBVERBS_RMR_VEC.get().unwrap()
             .get(mr_index as usize).unwrap();
         let mr_mut = unsafe { get_mut_from_immut(mr) };
         let raw_msg_len = u16::from_be_bytes([
@@ -335,9 +423,9 @@ impl RpcNetworkCore
         RPC_DISPATCHER.get().unwrap().on_recv_msg(session_id, mr_slice);
     }
 
-    fn get_mr_index_by_wr_id(wr_id: u64) -> Option<u32>
+    fn get_smr_index_by_wr_id(wr_id: u64) -> Option<u32>
     {
-        let mr_map = IBVERBS_MR_MAP.get().unwrap()
+        let mr_map = IBVERBS_SMR_MAP.get().unwrap()
             .lock().unwrap(); // wr_id -> mr_index
         if mr_map.contains_key(&wr_id)
         {
@@ -349,9 +437,23 @@ impl RpcNetworkCore
         }
     }
 
-    pub fn on_send(&mut self, session_id: u32)
+    fn get_rmr_index_by_wr_id(wr_id: u64) -> Option<u32>
     {
-        
+        let mr_map = IBVERBS_RMR_MAP.get().unwrap()
+            .lock().unwrap(); // wr_id -> mr_index
+        if mr_map.contains_key(&wr_id)
+        {
+            Some(mr_map.get(&wr_id).unwrap().clone())
+        }
+        else
+        {
+            None
+        }
+    }
+
+    pub fn on_send(wr_id: u64)
+    {
+        let smr_index = Self::get_smr_index_by_wr_id(wr_id).unwrap();
 
     }
 
@@ -364,12 +466,13 @@ impl RpcNetworkCore
         
         // connect 
         let pd = IBVERBS_PD.get().unwrap();
-        let cq = IBVERBS_CQ.get().unwrap();
+        let sq = IBVERBS_SQ.get().unwrap();
+        let rq = IBVERBS_RQ.get().unwrap();
         let qp_builder = pd.create_qp(
-            &cq, 
-            1, 
-            &cq, 
-            1, 
+            &sq, 
+            1024, 
+            &rq, 
+            1024, 
             ibverbs::ibv_qp_type::IBV_QPT_RC
         ).build().unwrap();
         let loc_endpoint = 

@@ -11,9 +11,12 @@ use tracing::info;
 use tracing::trace;
 use tracing::{error};
 
-use super::srpc_core_network::IBVERBS_CQ;
+use crate::core::network::srpc_core_network::IBVERBS_QP_MAP;
+use crate::core::srpc_session::RpcSession;
+
+use super::srpc_core_network::IBVERBS_SQ;
+use super::srpc_core_network::IBVERBS_RQ;
 use super::srpc_core_network::IBVERBS_PD;
-use super::srpc_core_network::LOCAL_ENDPOINT;
 
 // Communication through legacy TCP sockets functionality 
 // before RDMA connection is established. 
@@ -37,27 +40,30 @@ impl PreCommService for SrpcGrpcPreComm {
 
         // serialize designated endpoint 
         let pd = IBVERBS_PD.get().unwrap();
-        let cq = IBVERBS_CQ.get().unwrap();
-        // let qp_builder = pd.create_qp(
-        //     &cq, 
-        //     &cq, 
-        //     ibverbs::ibv_qp_type::IBV_QPT_RC
-        // ).build().unwrap();
-        // let endpoint = qp_builder.endpoint();
-        // let qp = qp_builder.handshake(src_endpoint).unwrap();
+        let sq = IBVERBS_SQ.get().unwrap();
+        let rq = IBVERBS_RQ.get().unwrap();
+        let qp_builder = pd.create_qp(
+            &sq, 
+            1024, 
+            &rq, 
+            1024, 
+            ibverbs::ibv_qp_type::IBV_QPT_RC
+        ).build().unwrap();
+        let endpoint = qp_builder.endpoint();
+        let qp = qp_builder.handshake(src_endpoint).unwrap();
         
-        // let session_id = RpcSession::get_session_id(); 
-        // info!("qp_map insert session_id: {}", session_id);
-        // IBVERBS_QP_MAP.get().unwrap().lock().unwrap()
-        //     .insert(session_id, qp);
+        let session_id = RpcSession::get_session_id(); 
+        info!("qp_map insert session_id: {}", session_id);
+        IBVERBS_QP_MAP.get().unwrap().lock().unwrap()
+            .insert(session_id, qp);
 
-        // let mut serializer = 
-        //     flexbuffers::FlexbufferSerializer::new();
-        // endpoint.serialize(&mut serializer).unwrap();
-        // let endpoint_bin = serializer.view();
-        // let endpoint_bin_vec = endpoint_bin.to_vec();
+        let mut serializer = 
+            flexbuffers::FlexbufferSerializer::new();
+        endpoint.serialize(&mut serializer).unwrap();
+        let endpoint_bin = serializer.view();
+        let endpoint_bin_vec = endpoint_bin.to_vec();
 
-        let endpoint_bin_vec = LOCAL_ENDPOINT.get().unwrap();
+        // let endpoint_bin_vec = LOCAL_ENDPOINT.get().unwrap();
 
         let response = GetEndpointResponse {
             endpoint: endpoint_bin_vec.to_vec()
