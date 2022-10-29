@@ -1,6 +1,3 @@
-pub static LOCAL_ENDPOINT: once_cell::sync::OnceCell<std::sync::Arc<Vec<u8>>> = 
-    OnceCell::new();
-
 #[derive(Debug)]
 pub struct RpcNetworkCore
 {
@@ -32,6 +29,8 @@ pub static IBVERBS_PD: OnceCell<std::sync::Arc<
     ibverbs::ProtectionDomain>> = OnceCell::new();
 pub static IBVERBS_CTX: OnceCell<std::sync::Arc<
     ibverbs::Context>> = OnceCell::new(); 
+// pub static IBVERBS_PQP: OnceCell<std::sync::Arc<
+//     ibverbs::PreparedQueuePair>> = OnceCell::new();
 pub static IBVERBS_SQ: OnceCell<std::sync::Arc<
     ibverbs::CompletionQueue>> = OnceCell::new();
 pub static IBVERBS_RQ: OnceCell<std::sync::Arc<
@@ -172,6 +171,7 @@ impl RpcNetworkCore
             std::sync::Arc::new(pd)
         );
 
+        // create memory regions 
         let pd = IBVERBS_PD.get().unwrap();
         let mut smr_vec = Vec::new();
         let smr_size = conf.loc_mr_size as usize;
@@ -189,11 +189,13 @@ impl RpcNetworkCore
             let rmr = pd.allocate::<u8>(rmr_size).unwrap();
             rmr_vec.push(rmr);
         }
-        let _result = IBVERBS_RMR_VEC.set(rmr_vec);
+        let _result = IBVERBS_RMR_VEC.set(rmr_vec); 
 
+        // create prepared queue pair 
+
+        // start polling work request queues 
         let sq = IBVERBS_SQ.get().unwrap();
         let rq = IBVERBS_RQ.get().unwrap();
-
         let _pollsq_handle = tokio::spawn(async move {
             Self::poll_cq(sq);
         });
@@ -484,9 +486,6 @@ impl RpcNetworkCore
         loc_endpoint.serialize(&mut serializer).unwrap();
         let endpoint_bin = serializer.view();
         let endpoint_bin_vec = endpoint_bin.to_vec();
-        LOCAL_ENDPOINT.set(
-            std::sync::Arc::new(endpoint_bin_vec)
-        ).unwrap();
 
         let rmt_endpoint = 
             SrpcGrpcPreComm::get_endpoint(

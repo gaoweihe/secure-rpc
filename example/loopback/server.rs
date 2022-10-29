@@ -51,18 +51,6 @@ impl PreCommService for SrpcGrpcPreComm {
             ibverbs::QueuePairEndpoint::deserialize(reader).unwrap();
 
         // serialize designated endpoint 
-        // let pd = PROTECTION_DOMAIN.get().unwrap();
-        // let cq = RECEIVE_QUEUE.get().unwrap();
-        // let qp_builder = pd.create_qp(
-        //     &cq, 
-        //     8, 
-        //     &cq, 
-        //     8,  
-        //     ibverbs::ibv_qp_type::IBV_QPT_RC
-        // ).build().unwrap();
-        // let endpoint = qp_builder.endpoint();
-        // let qp = qp_builder.handshake(src_endpoint).unwrap();
-
         let loc_endpoint_bin_vec = 
             LOCAL_ENDPOINT.get().unwrap();
 
@@ -70,7 +58,8 @@ impl PreCommService for SrpcGrpcPreComm {
             endpoint: loc_endpoint_bin_vec.to_vec()
         };
 
-        // sleep for 1 second to wait polling thread 
+        // sleep for 1 second to wait 
+        // for polling thread to start 
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         Ok(tonic::Response::new(response))

@@ -63,11 +63,10 @@ impl PreCommService for SrpcGrpcPreComm {
         let endpoint_bin = serializer.view();
         let endpoint_bin_vec = endpoint_bin.to_vec();
 
-        // let endpoint_bin_vec = LOCAL_ENDPOINT.get().unwrap();
-
         let response = GetEndpointResponse {
             endpoint: endpoint_bin_vec.to_vec()
         };
+        info!("gRPC srv get_endpoint response: {:?}", endpoint);
 
         Ok(tonic::Response::new(response))
     }
@@ -142,7 +141,6 @@ impl SrpcGrpcPreComm {
         match result {
             Ok(response) => {
                 let response = response.into_inner();
-                trace!("gRPC response: {:?}", response);
 
                 let endpoint_bin = response.endpoint.as_slice();
                 
@@ -155,7 +153,7 @@ impl SrpcGrpcPreComm {
                         reader
                     ).unwrap();
 
-                info!("rmt_endpoint: {:?}", endpoint);
+                info!("gRPC clt get_endpoint response: {:?}", endpoint);
 
                 return Some(endpoint);
             },
