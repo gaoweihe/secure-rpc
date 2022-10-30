@@ -5,13 +5,13 @@ Secure RPC service.
 On server side: 
 ```
 cd /path/to/project/example
-cargo run --release --bin loopback-server
+cargo run --release --bin bw-server
 ``` 
 
 On client side: 
 ```
 cd /path/to/project/example
-cargo run --release --bin loopback-client -- --server http://10.0.0.11:50051
+cargo run --release --bin bw-client -- --server http://10.0.0.11:50051
 ```
 
 ## Source files
