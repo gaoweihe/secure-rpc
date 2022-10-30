@@ -13,7 +13,6 @@ use crate::core::srpc_session::RpcSession;
 use super::srpc_core::RPC_DISPATCHER;
 use super::srpc_session::SESSION_COUNTER; 
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct RpcDispatcher
 {

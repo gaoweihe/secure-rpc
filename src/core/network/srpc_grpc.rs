@@ -38,7 +38,7 @@ impl PreCommService for SrpcGrpcPreComm {
         let src_endpoint = 
             ibverbs::QueuePairEndpoint::deserialize(reader).unwrap();
 
-        info!("gRPC srv src_endpoint: {:?}", src_endpoint);
+        info!("remote endpoint: {:?}", src_endpoint);
 
         // serialize designated endpoint 
         let pd = IBVERBS_PD.get().unwrap();
@@ -46,9 +46,9 @@ impl PreCommService for SrpcGrpcPreComm {
         let rq = IBVERBS_RQ.get().unwrap();
         let qp_builder = pd.create_qp(
             &sq, 
-            1024, 
+            64, 
             &rq, 
-            1024, 
+            64, 
             ibverbs::ibv_qp_type::IBV_QPT_RC
         ).build().unwrap();
         let endpoint = qp_builder.endpoint();
@@ -68,7 +68,7 @@ impl PreCommService for SrpcGrpcPreComm {
         let response = GetEndpointResponse {
             endpoint: endpoint_bin_vec.to_vec()
         };
-        info!("gRPC srv get_endpoint response: {:?}", endpoint);
+        info!("local endpoint: {:?}", endpoint);
 
         Ok(tonic::Response::new(response))
     }
@@ -122,6 +122,7 @@ impl SrpcGrpcPreComm {
             Self::connect_to(peer_uri).await;
 
         // serialize local endpoint 
+        info!("local endpoint: {:?}", loc_endpoint);
         let mut serializer = 
             flexbuffers::FlexbufferSerializer::new(); 
         loc_endpoint.serialize(&mut serializer).unwrap();
@@ -153,7 +154,7 @@ impl SrpcGrpcPreComm {
                         reader
                     ).unwrap();
 
-                info!("gRPC clt get_endpoint response: {:?}", endpoint);
+                info!("remote endpoint: {:?}", endpoint);
 
                 return Some(endpoint);
             },

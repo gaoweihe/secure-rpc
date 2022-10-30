@@ -138,6 +138,7 @@ async fn main() {
         let mut wr_id = 10000000;
 
         // poll for remote endpoint 
+        info!("waiting for remote endpoint");
         let rmt_ep: ibverbs::QueuePairEndpoint;
         loop {
             let ep_res = REMOTE_ENDPOINT.get();
@@ -148,7 +149,6 @@ async fn main() {
                     break;
                 },
                 None => {
-                    info!("waiting for remote endpoint");
                     // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }
             }

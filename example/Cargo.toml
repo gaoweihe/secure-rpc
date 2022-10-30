@@ -24,9 +24,17 @@ core_affinity = "0.5"
 tonic-build = "0.7"
 
 [[bin]]
-name = "loopback-server"
-path = "loopback/server.rs"
+name = "bw-server"
+path = "bandwidth/server.rs"
 
 [[bin]]
-name = "loopback-client"
-path = "loopback/client.rs"
+name = "bw-client"
+path = "bandwidth/client.rs"
+
+[[bin]]
+name = "scb-server"
+path = "simple_cb/server.rs"
+
+[[bin]]
+name = "scb-client"
+path = "simple_cb/client.rs"

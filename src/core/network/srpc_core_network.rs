@@ -157,8 +157,8 @@ impl RpcNetworkCore
         );
 
         let ctx = IBVERBS_CTX.get().unwrap();
-        let sq = ctx.create_cq(16, 0).unwrap();
-        let rq = ctx.create_cq(16, 0).unwrap();
+        let sq = ctx.create_cq(64, 0).unwrap();
+        let rq = ctx.create_cq(64, 1).unwrap();
         let pd = ctx.alloc_pd().unwrap();
 
         let _result = IBVERBS_SQ.set(
@@ -190,8 +190,6 @@ impl RpcNetworkCore
             rmr_vec.push(rmr);
         }
         let _result = IBVERBS_RMR_VEC.set(rmr_vec); 
-
-        // create prepared queue pair 
 
         // start polling work request queues 
         let sq = IBVERBS_SQ.get().unwrap();
@@ -227,7 +225,7 @@ impl RpcNetworkCore
                         Self::release_occupied_rmr(wr_id);
                     }
                     _ => {
-                        error!("unexpected completion wc.opcode() = {:?}", wc.opcode());
+                        error!("unexpected completion: {:?}", wc.error());
                         // panic!("unexpected completion");
                     }
                 }
@@ -317,30 +315,6 @@ impl RpcNetworkCore
         }
     }
 
-    pub fn check_conn_map(&mut self)
-    {
-        let mut rq: Vec<(u32, Vec<u8>)> = Vec::new();
-
-        {
-            let mut conn_map = self.conn_map.write().unwrap();
-            for (session_id, (send_queue, recv_queue)) in conn_map.iter_mut()
-            {
-                let recv_queue_len = recv_queue.len();
-                for i in 0..recv_queue_len
-                {
-                    let msg = recv_queue.get(i).unwrap();
-                    rq.push((session_id.clone(), msg.clone()));
-                }
-                recv_queue.clear();
-            }
-        }
-
-        // for (session_id, msg) in rq
-        // {
-        //     self.on_recv(session_id, msg.as_slice());
-        // }
-    }
-
     pub fn send_to(&self, session_id: u32, bin: &[u8])
     {
         let conf = RPC_CONF.get().unwrap();
@@ -368,10 +342,7 @@ impl RpcNetworkCore
         unsafe { 
             qp.post_receive(
                 &mut mr_recv, 
-                std::ops::Range{ 
-                    start: 0, 
-                    end: conf.loc_mr_size as usize
-                }, 
+                .., 
                 wr_id
             ) 
         }.unwrap();
@@ -387,10 +358,7 @@ impl RpcNetworkCore
         unsafe { 
             qp.post_send(
                 &mut mr_send, 
-                std::ops::Range{ 
-                    start: 0, 
-                    end: conf.loc_mr_size as usize
-                }, 
+                .., 
                 wr_id
             )
         }.unwrap();
@@ -472,14 +440,13 @@ impl RpcNetworkCore
         let rq = IBVERBS_RQ.get().unwrap();
         let qp_builder = pd.create_qp(
             &sq, 
-            1024, 
+            64, 
             &rq, 
-            1024, 
+            64, 
             ibverbs::ibv_qp_type::IBV_QPT_RC
         ).build().unwrap();
         let loc_endpoint = 
             qp_builder.endpoint(); // local endpoint 
-        info!("local endpoint = {:?}", loc_endpoint);
 
         let mut serializer = 
             flexbuffers::FlexbufferSerializer::new(); 
@@ -492,7 +459,6 @@ impl RpcNetworkCore
                 &loc_endpoint, 
                 peer_uri
             ).await.unwrap(); 
-        info!("remote endpoint = {:?}", rmt_endpoint);
 
         let qp = qp_builder.handshake(rmt_endpoint).unwrap(); 
         info!("qp_map insert session_id: {}", session_id);
