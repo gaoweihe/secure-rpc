@@ -1,3 +1,5 @@
+use serde::{Serialize, Deserialize};
+
 pub fn serialize_endpoint(
     endpoint: ibverbs::QueuePairEndpoint
 ) -> Vec<u8> {

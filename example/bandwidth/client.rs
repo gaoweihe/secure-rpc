@@ -106,6 +106,7 @@ async fn main() {
         ctx.create_cq(1024, 0).unwrap()
     ).unwrap();
     let sq = SEND_QUEUE.get().unwrap();
+    let rq = RECEIVE_QUEUE.get().unwrap();
 
     let qp_builder = pd.create_qp(
         &sq, 
@@ -164,93 +165,104 @@ async fn main() {
     // handshake with remote endpoint 
     let mut qp = qp_builder.handshake(rmt_ep).unwrap();
 
-    let push_handle = tokio::spawn(async move {
-        let mut mr = pd.allocate::<u8>(1048576).unwrap();
+    // let push_handle = tokio::spawn(async move {
+    //     let mut mr = pd.allocate::<u8>(1048576).unwrap();
 
-        let mut wr_id = 10000000;
+    //     let mut wr_id = 10000000;
 
-        // record current time 
-        let start = std::time::Instant::now();
+    //     // record current time 
+    //     let start = std::time::Instant::now();
 
-        loop {
-            let result = unsafe { 
-                qp.post_send(&mut mr, .., wr_id) 
-            };
-            match result {
-                Ok(_) => {
-                    wr_id += 1;
-                    // info!("post_send: OK: wr_id = {}", wr_id);
-                    if wr_id >= 10000000 + 1000 {
-                        break;
-                    }  
-                }, 
-                Err(e) => {
-                    // info!("post_send: Err: {:?}", e);
-                }
-            }
-        }
+    //     loop {
+    //         let result = unsafe { 
+    //             qp.post_send(&mut mr, .., wr_id) 
+    //         };
+    //         match result {
+    //             Ok(_) => {
+    //                 wr_id += 1;
+    //                 // info!("post_send: OK: wr_id = {}", wr_id);
+    //                 if wr_id >= 10000000 + 1000 {
+    //                     break;
+    //                 }  
+    //             }, 
+    //             Err(e) => {
+    //                 // info!("post_send: Err: {:?}", e);
+    //             }
+    //         }
+    //     }
 
-        // record current time
-        let end = std::time::Instant::now();
+    //     // record current time
+    //     let end = std::time::Instant::now();
 
-        // calculate time elapsed
-        let elapsed = end - start;
+    //     // calculate time elapsed
+    //     let elapsed = end - start;
 
-        // print time elapsed
-        info!("elapsed: {:?}", elapsed);
+    //     // print time elapsed
+    //     info!("elapsed: {:?}", elapsed);
 
-        // sleep for one second
-        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-    });
+    //     // sleep for one second
+    //     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    // });
 
     let sq_poll = sq.clone();
-    let poll_handle = tokio::spawn(async move {
-        let mut completions = [ibverbs::ibv_wc::default(); 100];
+    let rq_poll = rq.clone();
+    // let poll_handle = tokio::spawn(async move {
+    //     let mut completions = [ibverbs::ibv_wc::default(); 100];
 
-        let mut is_start = false;
-        let mut req_cnt = 0;
+    //     let mut is_start = false;
+    //     let mut req_cnt = 0;
 
-        let mut start = std::time::Instant::now();
+    //     let mut start = std::time::Instant::now();
 
-        let mut exit_flag = false;
+    //     let mut exit_flag = false;
 
-        loop {
-            let completed = sq_poll.poll(&mut completions[..]).unwrap();
-            if completed.is_empty() {
-                continue;
-            }
+    //     loop {
+    //         let completed = rq_poll.poll(&mut completions[..]).unwrap();
+    //         let completed = sq_poll.poll(&mut completions[..]).unwrap();
+    //         if completed.is_empty() {
+    //             continue;
+    //         }
 
-            if !is_start {
-                is_start = true;
-                start = std::time::Instant::now();
-            }
+    //         if !is_start {
+    //             is_start = true;
+    //             start = std::time::Instant::now();
+    //         }
 
-            for wc in completed {
-                match wc.opcode() {
-                    ibverbs::ibv_wc_opcode::IBV_WC_SEND => {
-                        req_cnt += 1;
-                        if req_cnt >= 1000 {
-                            exit_flag = true;
-                            break;
-                        }
-                    }
-                    _ => {
-                        panic!("unexpected completion code {:?}", wc.opcode());
-                    },
-                }
-            }
+    //         for wc in completed {
+    //             match wc.opcode() {
+    //                 ibverbs::ibv_wc_opcode::IBV_WC_SEND => {
+    //                     req_cnt += 1;
+    //                     if req_cnt >= 1000 {
+    //                         exit_flag = true;
+    //                         break;
+    //                     }
+    //                 }
+    //                 _ => {
+    //                     panic!("unexpected completion code {:?}, wc error: {:?}", 
+    //                         wc.opcode(), 
+    //                         wc.error()
+    //                     );
+    //                 },
+    //             }
+    //         }
 
-            if exit_flag {
-                break;
-            }
-        }
+    //         if exit_flag {
+    //             break;
+    //         }
+    //     }
 
-        let end = std::time::Instant::now();
-        let elapsed = end - start;
-        println!("elapsed: {:?}", elapsed);
-        std::process::exit(0);
-    }); 
+    //     // sleep for 10 seconds
+    //     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
-    push_handle.await.unwrap();
-    poll_handle.await.unwrap();
+    //     let end = std::time::Instant::now();
+    //     let elapsed = end - start;
+    //     println!("elapsed: {:?}", elapsed);
+    //     std::process::exit(0);
+    // }); 
+
+    // push_handle.await.unwrap();
+    // poll_handle.await.unwrap();
+
+    // sleep for 10 seconds 
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 }

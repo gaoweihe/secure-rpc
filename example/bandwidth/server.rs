@@ -157,9 +157,35 @@ async fn main() {
         // handshake with remote endpoint 
         let mut qp = qp_builder.handshake(rmt_ep).unwrap();
 
+        let result = unsafe { 
+            qp.post_receive(&mut mr, .., 2)
+        };
+        match result {
+            Ok(_) => {
+                wr_id += 1;
+                // info!("post_send: OK: wr_id = {}", wr_id);
+            },
+            Err(e) => {
+                info!("post_send: Err: {:?}", e);
+            }
+        }
+
+        let result = unsafe { 
+            qp.post_send(&mut mr, .., 1)
+        };
+        match result {
+            Ok(_) => {
+                wr_id += 1;
+                // info!("post_send: OK: wr_id = {}", wr_id);
+            },
+            Err(e) => {
+                info!("post_send: Err: {:?}", e);
+            }
+        }
+
         loop {
             let result = unsafe { 
-                qp.post_receive(&mut mr, .., wr_id) 
+                qp.post_receive(&mut mr, .., wr_id)
             };
             match result {
                 Ok(_) => {
@@ -188,7 +214,10 @@ async fn main() {
                     ibverbs::ibv_wc_opcode::IBV_WC_RECV => {
                     }
                     _ => {
-                        panic!("unexpected completion code {:?}", wc.opcode());
+                        panic!("unexpected completion code {:?}, wc error: {:?}", 
+                            wc.opcode(), 
+                            wc.error()
+                        );
                     },
                 }
             }
